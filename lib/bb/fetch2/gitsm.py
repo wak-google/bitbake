@@ -36,6 +36,7 @@ from   bb.fetch2.git import Git
 from   bb.fetch2 import runfetchcmd
 from   bb.fetch2 import logger
 from   bb.fetch2 import Fetch
+from   bb.fetch2 import FetchData
 from   bb.fetch2 import BBFetchException
 
 class GitSM(Git):
@@ -146,6 +147,29 @@ class GitSM(Git):
             function(ud, url, module, paths[module], ld)
 
         return submodules != []
+
+    def need_update(self, ud, d):
+        if Git.need_update(self, ud, d):
+            return True
+        class NeedUpdateException(Exception):
+            pass
+        def need_update_submodule(ud, url, module, modpath, d):
+            url += ";bareclone=1;nobranch=1"
+            lud = FetchData(url, d, False)
+            lud.setup_localpath(d)
+            if lud.lockfile:
+                lf = bb.utils.lockfile(lud.lockfile)
+            try:
+                if lud.method.need_update(lud, d):
+                    raise NeedUpdateException
+            finally:
+                if lud.lockfile:
+                    bb.utils.unlockfile(lf)
+        try:
+            self.process_submodules(ud, ud.clonedir, need_update_submodule, d)
+            return False
+        except NeedUpdateException:
+            return True
 
     def download(self, ud, d):
         def download_submodule(ud, url, module, modpath, d):
